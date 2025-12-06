@@ -1,0 +1,5 @@
+{
+  "name": "PixelForge AI Studio",
+  "description": "An advanced AI-powered design studio for generating YouTube thumbnails, logos, social banners, and more using Google Gemini models.",
+  "requestFramePermissions": []
+}
