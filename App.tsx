@@ -4,16 +4,26 @@ import ChatInterface from './components/ChatInterface';
 import AdOverlay from './components/AdOverlay';
 import { AppMode, ChatMessage, GenerationConfig } from './types';
 import { refinePrompt, generateImage, generateWithImages } from './services/geminiService';
+import { memoryService } from './services/memoryService';
 
 function App() {
   const [currentMode, setCurrentMode] = useState<AppMode>(AppMode.GENERAL);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  
+  // Store chat history separately for each mode
+  const [histories, setHistories] = useState<Record<string, ChatMessage[]>>({});
+  
+  // Track generation status per mode
+  const [generatingMode, setGeneratingMode] = useState<AppMode | null>(null);
+  
   const [showAdOverlay, setShowAdOverlay] = useState(false);
   const [config, setConfig] = useState<GenerationConfig>({
     aspectRatio: '1:1',
     highQuality: false
   });
+
+  // Get messages for the current mode
+  const currentMessages = histories[currentMode] || [];
+  const isGenerating = generatingMode === currentMode;
 
   // Automatically set Aspect Ratio and Quality based on Mode
   useEffect(() => {
@@ -60,12 +70,57 @@ function App() {
   }, []);
 
   const handleReset = useCallback(() => {
-    setMessages([]);
-    setIsGenerating(false);
-  }, []);
+    setHistories(prev => ({
+        ...prev,
+        [currentMode]: []
+    }));
+    if (generatingMode === currentMode) {
+        setGeneratingMode(null);
+    }
+  }, [currentMode, generatingMode]);
+
+  /**
+   * Supervised Learning Feedback Loop
+   * Called when user clicks "Like" / Thumbs Up on a message
+   */
+  const handleLikeMessage = useCallback((index: number) => {
+    const activeMode = currentMode;
+    const messages = histories[activeMode] || [];
+    const message = messages[index];
+    
+    // Safety check: ensure it's an assistant message with metadata
+    if (!message || message.role !== 'assistant' || !message.metadata?.finalPrompt) return;
+    
+    // 1. Find the User Prompt that triggered this (usually index - 1)
+    const userMessage = messages[index - 1];
+    const userInput = userMessage?.role === 'user' ? userMessage.content : "";
+
+    // 2. Teach the Memory Service
+    if (userInput && message.metadata.finalPrompt) {
+        memoryService.learn(activeMode, userInput, message.metadata.finalPrompt);
+    }
+
+    // 3. Update UI to show it's liked
+    const newMessages = [...messages];
+    newMessages[index] = {
+        ...message,
+        metadata: {
+            ...message.metadata,
+            liked: true
+        }
+    };
+    
+    setHistories(prev => ({
+        ...prev,
+        [activeMode]: newMessages
+    }));
+  }, [currentMode, histories]);
 
   const handleSendMessage = useCallback(async (text: string, imageInputs?: string[]) => {
-    // Add user message to state
+    // Capture the mode that initiated the request
+    const activeMode = currentMode;
+
+    // Add user message to state for the specific mode
     const newUserMsg: ChatMessage = {
       role: 'user',
       content: text,
@@ -73,8 +128,12 @@ function App() {
       timestamp: Date.now()
     };
     
-    setMessages(prev => [...prev, newUserMsg]);
-    setIsGenerating(true);
+    setHistories(prev => ({
+        ...prev,
+        [activeMode]: [...(prev[activeMode] || []), newUserMsg]
+    }));
+    
+    setGeneratingMode(activeMode);
 
     try {
       let finalPrompt = text;
@@ -84,16 +143,16 @@ function App() {
       // WORKFLOW 1: Generation WITH Images (Editing/Compositing)
       if (hasImages) {
         // 1. Refine the prompt specifically for image-to-image
-        const refinedPrompt = await refinePrompt(text, currentMode, true);
+        const refinedPrompt = await refinePrompt(text, activeMode, true);
         finalPrompt = refinedPrompt;
 
         // Default prompt fallbacks
         if (!finalPrompt || finalPrompt === "" || (text === "" && !finalPrompt)) {
-            if (currentMode === AppMode.BG_REMOVER) {
+            if (activeMode === AppMode.BG_REMOVER) {
                 finalPrompt = "Isolate the main subject on a solid white background. Do not change the subject.";
-            } else if (currentMode === AppMode.THUMBNAIL) {
+            } else if (activeMode === AppMode.THUMBNAIL) {
                 finalPrompt = "Make this into an exciting YouTube thumbnail. High contrast, expressive.";
-            } else if (currentMode === AppMode.LOGO) {
+            } else if (activeMode === AppMode.LOGO) {
                 finalPrompt = "Turn this into a minimalist vector logo.";
             } else {
                 finalPrompt = "Enhance this image, high quality.";
@@ -104,8 +163,8 @@ function App() {
       } 
       // WORKFLOW 2: Text-to-Image Generation (No input images)
       else {
-        // Step 1: Refine the prompt using Gemini Chat
-        const refinedPrompt = await refinePrompt(text, currentMode, false);
+        // Step 1: Refine the prompt using Gemini Chat + Memory Service
+        const refinedPrompt = await refinePrompt(text, activeMode, false);
         finalPrompt = refinedPrompt;
         
         // Step 2: Generate the image
@@ -113,18 +172,30 @@ function App() {
       }
 
       if (resultImageUrl) {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `Here is your ${currentMode} design!`,
-          images: [resultImageUrl as string], // Store result image here
-          timestamp: Date.now()
-        }]);
+        setHistories(prev => ({
+            ...prev,
+            [activeMode]: [...(prev[activeMode] || []), {
+                role: 'assistant',
+                content: `Here is your ${activeMode} design!`,
+                images: [resultImageUrl as string], 
+                timestamp: Date.now(),
+                // Store the prompt metadata so we can learn from it later
+                metadata: {
+                    originalPrompt: text,
+                    finalPrompt: finalPrompt,
+                    liked: false
+                }
+            }]
+        }));
       } else {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: "Sorry, I couldn't generate an image this time. Please try again.",
-          timestamp: Date.now()
-        }]);
+        setHistories(prev => ({
+            ...prev,
+            [activeMode]: [...(prev[activeMode] || []), {
+                role: 'assistant',
+                content: "Sorry, I couldn't generate an image this time. Please try again.",
+                timestamp: Date.now()
+            }]
+        }));
       }
 
     } catch (error: any) {
@@ -160,13 +231,16 @@ function App() {
           troubleshootingSteps = "**How to Fix:**\nCheck your internet connection and ensure your API key is configured correctly in the environment variables.";
       }
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `${userFriendlyTitle}\n\n**Error Details:** ${errMessage}\n\n${troubleshootingSteps}`,
-        timestamp: Date.now()
-      }]);
+      setHistories(prev => ({
+        ...prev,
+        [activeMode]: [...(prev[activeMode] || []), {
+            role: 'assistant',
+            content: `${userFriendlyTitle}\n\n**Error Details:** ${errMessage}\n\n${troubleshootingSteps}`,
+            timestamp: Date.now()
+        }]
+      }));
     } finally {
-      setIsGenerating(false);
+      setGeneratingMode(prev => (prev === activeMode ? null : prev));
     }
   }, [currentMode, config]);
 
@@ -180,8 +254,10 @@ function App() {
       
       <main className="flex-1 flex flex-col relative w-full h-full bg-slate-950">
          <ChatInterface 
-            messages={messages} 
+            key={currentMode} // Force re-mount on mode change to clear input/selection state
+            messages={currentMessages} 
             onSendMessage={handleSendMessage}
+            onLikeMessage={handleLikeMessage}
             isGenerating={isGenerating}
             currentMode={currentMode}
             config={config}

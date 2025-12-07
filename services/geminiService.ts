@@ -1,5 +1,6 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { AppMode } from "../types";
+import { memoryService } from "./memoryService";
 
 // Helper to create a new client instance with the latest API key
 const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -18,25 +19,22 @@ Your task is to take a raw user description and transform it into a professional
 ### IMPORTANT: TEXT RENDERING
 If the user asks for text to be written (e.g., "says 'HELLO'", "with text 'SALE'"), you **MUST** format it in the prompt as: text "SALE", in bold typography.
 
-### MODE-SPECIFIC STRATEGIES:
+### MODE-SPECIFIC STRATEGIES (Default Guidance):
 
 1. **YouTube Thumbnail** (${AppMode.THUMBNAIL}):
    - **Goal**: High Click-Through Rate (CTR), exciting, vibrant, readable at small sizes.
    - **Keywords to Add**: "YouTube thumbnail", "4k resolution", "vibrant colors", "dramatic lighting", "expressive face", "rule of thirds", "action shot".
    - **Style**: High contrast, saturated.
-   - **Example**: User: "Minecraft gaming" -> Prompt: "Exciting YouTube thumbnail for Minecraft gaming, Steve character holding a diamond sword, dynamic action pose, vibrant green and blue colors, high contrast, 4k render."
 
 2. **Logo Design** (${AppMode.LOGO}):
    - **Goal**: Professional, scalable, clean, simple.
    - **Keywords to Add**: "vector art", "minimalist logo", "flat design", "clean lines", "white background", "professional", "geometric", "illustrator style".
    - **Avoid**: Photorealism, complex shading, clutter.
-   - **Example**: User: "Coffee shop" -> Prompt: "Minimalist vector logo for a coffee shop, stylized coffee bean icon, clean lines, flat brown and cream colors, white background, professional modern design."
 
 3. **Background Remover / Product Shot** (${AppMode.BG_REMOVER}):
    - **Goal**: Isolate the subject perfectly.
    - **Keywords to Add**: "isolated on pure white background", "studio lighting", "product photography", "clean cut edges", "no background", "no shadows".
    - **Instruction**: The background must be SOLID WHITE.
-   - **Example**: User: "A red shoe" -> Prompt: "Professional product photography of a red sneaker, isolated on a pure white background, studio lighting, high resolution, clean edges."
 
 4. **Social Media Banner** (${AppMode.BANNER}):
    - **Goal**: Wide aspect ratio, room for UI elements (avatars/buttons).
@@ -64,20 +62,34 @@ Return ONLY the final refined prompt string. Do not add "Here is the prompt:" or
 
 /**
  * Refines a user's raw text input into a high-quality image generation prompt.
+ * Uses SUPERVISED LEARNING (Memory) to inject past successful styles.
  */
 export const refinePrompt = async (userInput: string, mode: AppMode, hasImages: boolean = false): Promise<string> => {
   try {
     const ai = getAiClient();
+    
+    // RECALL: Fetch learned patterns for this mode
+    const learnedContext = memoryService.recall(mode);
+
+    // If we have learned memory, we explicitly tell the AI to use it.
+    const memoryDirective = learnedContext 
+      ? `\n\n[IMPORTANT: MEMORY ACTIVE]\nThe user has established a style preference in the 'LEARNED USER STYLES' section above. You MUST prioritize those stylistic choices (colors, lighting, medium) over the default mode strategies, while still keeping the new SUBJECT from the user input below.`
+      : "";
+
     const context = hasImages 
-      ? `Task: Create a prompt for Image-to-Image generation.\nApp Mode: ${mode}\nUser Input: "${userInput}"\n(User has attached reference images to use)`
-      : `Task: Create a prompt for Text-to-Image generation.\nApp Mode: ${mode}\nUser Input: "${userInput}"`;
+      ? `Task: Create a prompt for Image-to-Image generation.\nApp Mode: ${mode}${memoryDirective}\n\nCURRENT User Input: "${userInput}"\n(User has attached reference images to use)`
+      : `Task: Create a prompt for Text-to-Image generation.\nApp Mode: ${mode}${memoryDirective}\n\nCURRENT User Input: "${userInput}"`;
+
+    // combine system instruction with learned memory
+    // We append the learnedContext to the system instruction so it sets the "Persona" of the prompt engineer
+    const dynamicSystemInstruction = SYSTEM_INSTRUCTION_BASE + learnedContext;
 
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: context,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION_BASE,
-        temperature: 0.5, // Lower temperature for more adherence to instructions
+        systemInstruction: dynamicSystemInstruction,
+        temperature: 0.7, // Slightly higher creativity to blend style + new subject
       },
     });
 

@@ -13,6 +13,11 @@ export interface ChatMessage {
   content: string;
   images?: string[]; // Array of Base64 strings
   timestamp: number;
+  metadata?: {
+    originalPrompt?: string;
+    finalPrompt?: string;
+    liked?: boolean;
+  };
 }
 
 export interface GenerationConfig {

@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Upload, Sparkles, X, Image as ImageIcon, Plus, Download, Share2 } from 'lucide-react';
+import { Send, Upload, Sparkles, X, Image as ImageIcon, Plus, Download, Share2, ThumbsUp } from 'lucide-react';
 import { ChatMessage, AppMode, GenerationConfig } from '../types';
 import AdUnit from './AdUnit';
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
   onSendMessage: (text: string, images?: string[]) => void;
+  onLikeMessage?: (index: number) => void;
   isGenerating: boolean;
   currentMode: AppMode;
   config: GenerationConfig;
@@ -15,6 +16,7 @@ interface ChatInterfaceProps {
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
   messages, 
   onSendMessage, 
+  onLikeMessage,
   isGenerating, 
   currentMode,
   config,
@@ -164,8 +166,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                          <Sparkles size={14} className="text-white" />
                      </div>
                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-slate-300 mb-3 bg-slate-800/50 px-4 py-3 rounded-2xl rounded-tl-sm border border-slate-700/50 inline-block">
+                        <div className="text-sm text-slate-300 mb-3 bg-slate-800/50 px-4 py-3 rounded-2xl rounded-tl-sm border border-slate-700/50 inline-block relative group/text">
                             {msg.content}
+                            
+                            {/* Learning Badge if Liked */}
+                            {msg.metadata?.liked && (
+                              <div className="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-lg border border-green-400 animate-in zoom-in">
+                                Learned
+                              </div>
+                            )}
                         </div>
 
                         {/* Generated Image Result */}
@@ -181,9 +190,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                                     
                                     {/* Overlay Actions */}
                                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition-all duration-300 flex items-end justify-between p-4">
-                                        <button className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-colors">
-                                            <Share2 size={20} />
-                                        </button>
+                                        <div className="flex gap-2">
+                                           {/* Teach / Like Button */}
+                                            {onLikeMessage && !msg.metadata?.liked && (
+                                                <button 
+                                                    onClick={() => onLikeMessage(idx)}
+                                                    className="bg-slate-800/80 hover:bg-green-600 text-white p-2 rounded-lg backdrop-blur-md transition-all border border-white/10"
+                                                    title="I like this style (Teach AI)"
+                                                >
+                                                    <ThumbsUp size={18} />
+                                                </button>
+                                            )}
+                                            <button className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-colors">
+                                                <Share2 size={20} />
+                                            </button>
+                                        </div>
                                         <button 
                                             onClick={() => downloadImage(msg.images![0], 'pixelforge')}
                                             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium shadow-lg transition-all transform hover:scale-105 active:scale-95"
