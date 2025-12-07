@@ -245,7 +245,7 @@ function App() {
   }, [currentMode, config]);
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans selection:bg-indigo-500/30">
+    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans selection:bg-teal-500/30">
       <Sidebar 
         currentMode={currentMode} 
         setMode={handleModeChange} 

@@ -88,10 +88,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       <div className="p-4 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-20 flex justify-between items-center shadow-lg">
         <div>
             <h3 className="text-slate-200 font-bold flex items-center gap-2 text-lg">
-            <Sparkles className="w-5 h-5 text-indigo-500" />
-            Creative Assistant
+            <Sparkles className="w-5 h-5 text-teal-400" />
+            PixFroge Assistant
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">Mode: <span className="text-indigo-400">{currentMode}</span></p>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">Mode: <span className="text-teal-400">{currentMode}</span></p>
         </div>
         
         {/* Compact Settings in Header */}
@@ -99,7 +99,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <select 
              value={config.aspectRatio}
              onChange={(e) => setConfig({...config, aspectRatio: e.target.value as any})}
-             className="bg-slate-800 text-slate-300 text-xs rounded-lg border border-slate-700 py-1.5 px-2 focus:ring-1 focus:ring-indigo-500 outline-none hidden sm:block"
+             className="bg-slate-800 text-slate-300 text-xs rounded-lg border border-slate-700 py-1.5 px-2 focus:ring-1 focus:ring-teal-500 outline-none hidden sm:block"
            >
              <option value="1:1">1:1 Square</option>
              <option value="16:9">16:9 Landscape</option>
@@ -109,10 +109,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
            </select>
            <button 
               onClick={() => setConfig({...config, highQuality: !config.highQuality})}
-              className={`text-xs rounded-lg border py-1.5 px-3 transition-all flex items-center gap-2 ${config.highQuality ? 'bg-indigo-900/30 border-indigo-500/50 text-indigo-300' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+              className={`text-xs rounded-lg border py-1.5 px-3 transition-all flex items-center gap-2 ${config.highQuality ? 'bg-teal-900/30 border-teal-500/50 text-teal-300' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
            >
              <span className="hidden sm:inline">{config.highQuality ? 'Pro' : 'Fast'}</span>
-             <div className={`w-2 h-2 rounded-full ${config.highQuality ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]' : 'bg-slate-600'}`}></div>
+             <div className={`w-2 h-2 rounded-full ${config.highQuality ? 'bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.8)]' : 'bg-slate-600'}`}></div>
            </button>
         </div>
       </div>
@@ -120,20 +120,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-8 scroll-smooth scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
         
-        {/* Top Ad Unit - Restored */}
+        {/* Top Ad Unit */}
         <div className="max-w-3xl mx-auto w-full">
              <AdUnit size="banner" className="h-[90px] mb-6 shadow-md border border-slate-800/50" label="Sponsored" />
         </div>
 
         {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center text-center mt-10 opacity-60 min-h-[40vh]">
-                <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mb-6">
-                    <Sparkles size={40} className="text-indigo-500" />
+                <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mb-6 border border-slate-700">
+                    <Sparkles size={40} className="text-teal-500" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-300 mb-2">What shall we create?</h2>
+                <h2 className="text-2xl font-bold text-slate-300 mb-2">PixFroge AI</h2>
                 <p className="text-slate-500 text-sm max-w-md mx-auto mb-4">Select a mode from the sidebar and describe your vision. You can also upload reference images.</p>
                 {currentMode === AppMode.THUMBNAIL && (
-                  <p className="text-indigo-400 text-xs font-medium bg-indigo-900/20 px-3 py-1 rounded-full border border-indigo-500/20">Pro Tip: Upload a screenshot for thumbnail remixes!</p>
+                  <p className="text-teal-400 text-xs font-medium bg-teal-900/20 px-3 py-1 rounded-full border border-teal-500/20">Pro Tip: Upload a screenshot for thumbnail remixes!</p>
                 )}
             </div>
         )}
@@ -145,7 +145,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             {/* User Message */}
             {msg.role === 'user' && (
                 <div className="max-w-[85%] sm:max-w-[70%]">
-                    <div className="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-5 py-3.5 shadow-lg shadow-indigo-900/20">
+                    <div className="bg-teal-600 text-white rounded-2xl rounded-tr-sm px-5 py-3.5 shadow-lg shadow-teal-900/20">
                         {msg.images && msg.images.length > 0 && (
                             <div className="flex flex-wrap gap-2 mb-3">
                                 {msg.images.map((img, i) => (
@@ -162,7 +162,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             {/* Assistant / Generated Content */}
             {msg.role === 'assistant' && (
                 <div className="w-full flex gap-4">
-                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 mt-1 shadow-lg shadow-purple-900/20">
+                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center shrink-0 mt-1 shadow-lg shadow-cyan-900/20">
                          <Sparkles size={14} className="text-white" />
                      </div>
                      <div className="flex-1 min-w-0">
@@ -206,8 +206,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                                             </button>
                                         </div>
                                         <button 
-                                            onClick={() => downloadImage(msg.images![0], 'pixelforge')}
-                                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium shadow-lg transition-all transform hover:scale-105 active:scale-95"
+                                            onClick={() => downloadImage(msg.images![0], 'pixfroge')}
+                                            className="flex items-center gap-2 bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded-lg font-medium shadow-lg transition-all transform hover:scale-105 active:scale-95"
                                         >
                                             <Download size={16} />
                                             <span>Download</span>
@@ -221,7 +221,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             )}
           </div>
           
-          {/* Banner Ad Insertion: Show after assistant response */}
+          {/* Banner Ad */}
           {msg.role === 'assistant' && (
               <div className="w-full max-w-3xl mx-auto mt-6 mb-2 animate-in fade-in duration-500">
                    <AdUnit size="banner" className="h-[90px] w-full shadow-lg border border-slate-800/30" label="Sponsored" />
@@ -233,14 +233,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         {isGenerating && (
              <div className="flex items-start max-w-3xl mx-auto w-full gap-4">
                 <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 mt-1">
-                     <div className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
+                     <div className="w-4 h-4 rounded-full border-2 border-teal-500 border-t-transparent animate-spin"></div>
                 </div>
                 <div className="bg-slate-800/30 rounded-2xl rounded-tl-sm px-5 py-3 border border-slate-700/50 flex items-center gap-3">
-                   <span className="text-sm text-slate-400">Crafting your masterpiece...</span>
+                   <span className="text-sm text-slate-400">PixFroge is crafting your vision...</span>
                    <div className="flex gap-1">
-                     <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
-                     <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
-                     <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+                     <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+                     <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+                     <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
                    </div>
                 </div>
              </div>
@@ -268,7 +268,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     {selectedImages.length < 3 && (
                     <button 
                         onClick={() => fileInputRef.current?.click()}
-                        className="h-16 w-16 rounded-xl border border-dashed border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:border-indigo-500 hover:bg-slate-800/50 transition-all"
+                        className="h-16 w-16 rounded-xl border border-dashed border-slate-700 flex items-center justify-center text-slate-500 hover:text-teal-400 hover:border-teal-500 hover:bg-slate-800/50 transition-all"
                     >
                         <Plus size={20} />
                     </button>
@@ -276,7 +276,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
             )}
 
-            <div className="flex items-end gap-2 bg-slate-800 p-2 rounded-2xl border border-slate-700 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all shadow-lg">
+            <div className="flex items-end gap-2 bg-slate-800 p-2 rounded-2xl border border-slate-700 focus-within:ring-2 focus-within:ring-teal-500/50 transition-all shadow-lg">
             <input 
                 type="file" 
                 ref={fileInputRef}
@@ -287,10 +287,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             />
             <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="p-3 text-slate-400 hover:text-indigo-400 hover:bg-slate-700/50 rounded-xl transition-all"
+                className="p-3 text-slate-400 hover:text-teal-400 hover:bg-slate-700/50 rounded-xl transition-all"
                 title="Upload Images (Max 3 recommended)"
             >
-                {currentMode === AppMode.BG_REMOVER ? <ImageIcon size={20} className="text-indigo-400" /> : <Upload size={20} />}
+                {currentMode === AppMode.BG_REMOVER ? <ImageIcon size={20} className="text-teal-400" /> : <Upload size={20} />}
             </button>
             
             <textarea
@@ -310,13 +310,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <button 
                 onClick={handleSend}
                 disabled={isGenerating || (!inputText.trim() && selectedImages.length === 0)}
-                className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-900/20 active:scale-95"
+                className="p-3 bg-teal-600 text-white rounded-xl hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-teal-900/20 active:scale-95"
             >
                 <Send size={20} />
             </button>
             </div>
             <p className="text-[10px] text-slate-600 mt-2 text-center opacity-60">
-                PixelForge AI can make mistakes. Review generated images carefully.
+                PixFroge AI can make mistakes. Review generated images carefully.
             </p>
         </div>
       </div>

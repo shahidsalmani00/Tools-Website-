@@ -1,6 +1,6 @@
 import { AppMode } from "../types";
 
-const STORAGE_KEY = 'pixelforge_brain_v1';
+const STORAGE_KEY = 'pixfrog_brain_v1';
 
 interface LearnedPattern {
   mode: AppMode;

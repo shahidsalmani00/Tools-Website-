@@ -23,7 +23,7 @@ const AdOverlay: React.FC<AdOverlayProps> = ({ isOpen, onClose }) => {
         </button>
 
         <div className="text-center space-y-2 mt-2">
-            <h3 className="text-xl font-bold text-white">PixelForge Sponsors</h3>
+            <h3 className="text-xl font-bold text-white">PixFroge Sponsors</h3>
             <p className="text-sm text-slate-400">Support us by viewing this message</p>
         </div>
 
@@ -34,7 +34,7 @@ const AdOverlay: React.FC<AdOverlayProps> = ({ isOpen, onClose }) => {
 
         <button 
             onClick={onClose}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-colors"
+            className="w-full py-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl font-medium transition-colors"
         >
             Continue to Tool
         </button>

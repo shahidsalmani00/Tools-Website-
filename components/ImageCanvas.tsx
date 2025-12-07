@@ -14,7 +14,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ image, isLoading, loadingStep
     if (!image) return;
     const link = document.createElement('a');
     link.href = image.url;
-    link.download = `pixelforge-${Date.now()}.png`;
+    link.download = `vividra-${Date.now()}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -86,7 +86,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ image, isLoading, loadingStep
 
       {/* Bottom Banner Ad */}
       <div className="mt-6">
-        <AdUnit size="banner" className="h-[90px]" label="Support PixelForge" />
+        <AdUnit size="banner" className="h-[90px]" label="Support Vividra" />
       </div>
     </div>
   );
