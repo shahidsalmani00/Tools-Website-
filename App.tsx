@@ -1,16 +1,15 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
-import ImageCanvas from './components/ImageCanvas';
 import ChatInterface from './components/ChatInterface';
-import { AppMode, ChatMessage, GeneratedImage, GenerationConfig } from './types';
+import AdOverlay from './components/AdOverlay';
+import { AppMode, ChatMessage, GenerationConfig } from './types';
 import { refinePrompt, generateImage, generateWithImages } from './services/geminiService';
 
 function App() {
   const [currentMode, setCurrentMode] = useState<AppMode>(AppMode.GENERAL);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
-  const [loadingStep, setLoadingStep] = useState<string>('');
+  const [showAdOverlay, setShowAdOverlay] = useState(false);
   const [config, setConfig] = useState<GenerationConfig>({
     aspectRatio: '1:1',
     highQuality: false
@@ -54,10 +53,14 @@ function App() {
     }));
   }, [currentMode]);
 
+  const handleModeChange = useCallback((mode: AppMode) => {
+    setCurrentMode(mode);
+    // Show interstitial ad when changing tools
+    setShowAdOverlay(true);
+  }, []);
+
   const handleReset = useCallback(() => {
     setMessages([]);
-    setGeneratedImage(null);
-    setLoadingStep('');
     setIsGenerating(false);
   }, []);
 
@@ -72,7 +75,6 @@ function App() {
     
     setMessages(prev => [...prev, newUserMsg]);
     setIsGenerating(true);
-    setLoadingStep('Analyzing request...');
 
     try {
       let finalPrompt = text;
@@ -81,14 +83,11 @@ function App() {
 
       // WORKFLOW 1: Generation WITH Images (Editing/Compositing)
       if (hasImages) {
-        setLoadingStep('Processing uploaded assets...');
-        
         // 1. Refine the prompt specifically for image-to-image
-        // If text is empty, refinePrompt might return empty string, so we handle that below
         const refinedPrompt = await refinePrompt(text, currentMode, true);
         finalPrompt = refinedPrompt;
 
-        // Default prompt fallbacks if the user didn't provide text or refine failed
+        // Default prompt fallbacks
         if (!finalPrompt || finalPrompt === "" || (text === "" && !finalPrompt)) {
             if (currentMode === AppMode.BG_REMOVER) {
                 finalPrompt = "Isolate the main subject on a solid white background. Do not change the subject.";
@@ -101,23 +100,12 @@ function App() {
             }
         }
 
-        setLoadingStep('Creating composition...');
         resultImageUrl = await generateWithImages(imageInputs, finalPrompt, config.aspectRatio);
       } 
       // WORKFLOW 2: Text-to-Image Generation (No input images)
       else {
         // Step 1: Refine the prompt using Gemini Chat
-        setLoadingStep('Refining prompt...');
         const refinedPrompt = await refinePrompt(text, currentMode, false);
-        
-        // Add Assistant message showing the refined prompt
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `Creating: "${refinedPrompt}"`,
-          timestamp: Date.now()
-        }]);
-
-        setLoadingStep('Generating image (this may take a moment)...');
         finalPrompt = refinedPrompt;
         
         // Step 2: Generate the image
@@ -125,15 +113,10 @@ function App() {
       }
 
       if (resultImageUrl) {
-        setGeneratedImage({
-          url: resultImageUrl,
-          prompt: finalPrompt,
-          timestamp: Date.now()
-        });
-        
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: "Here is your generated design!",
+          content: `Here is your ${currentMode} design!`,
+          images: [resultImageUrl as string], // Store result image here
           timestamp: Date.now()
         }]);
       } else {
@@ -145,21 +128,45 @@ function App() {
       }
 
     } catch (error: any) {
-      console.error(error);
-      const isPermissionError = error?.message?.includes('403') || error?.status === 'PERMISSION_DENIED';
+      console.error("Gemini API Error:", error);
       
-      const errorMessage = isPermissionError 
-        ? "Permission Denied: Your API key doesn't have access to the selected model. Please ensure you have a valid project with billing enabled for high-quality generation."
-        : "An error occurred. Please ensure your API key is valid and check your connection.";
+      const errString = error.toString();
+      const errMessage = error.message || "Unknown error";
+      
+      let userFriendlyTitle = "⚠️ Generation Failed";
+      let troubleshootingSteps = "";
+
+      // 403 Permission Denied / Forbidden
+      if (errString.includes('403') || errMessage.includes('PERMISSION_DENIED') || errString.includes('permission denied')) {
+        userFriendlyTitle = "⚠️ **Access Denied (403)**";
+        troubleshootingSteps = `
+**How to Fix:**
+1. **Enable API:** Go to Google Cloud Console > APIs & Services > Enable "Google Generative AI API".
+2. **Billing:** Ensure your Cloud Project has a Billing Account linked (Required for Image models).
+3. **Region:** Image generation might be restricted in your current region.
+4. **Key:** Verify your API_KEY is correct.`;
+      } 
+      // 429 Resource Exhausted / Quota
+      else if (errString.includes('429') || errMessage.includes('RESOURCE_EXHAUSTED')) {
+         userFriendlyTitle = "⚠️ **Quota Exceeded (429)**";
+         troubleshootingSteps = "**How to Fix:**\nYou have hit the rate limit. Please wait a minute before trying again or check your quota limits in Google Cloud Console.";
+      } 
+      // 500 Server Errors
+      else if (errString.includes('500') || errMessage.includes('INTERNAL')) {
+          userFriendlyTitle = "⚠️ **Server Error (500)**";
+          troubleshootingSteps = "**How to Fix:**\nGoogle's servers are experiencing issues. Please try again in a few moments.";
+      }
+      else {
+          troubleshootingSteps = "**How to Fix:**\nCheck your internet connection and ensure your API key is configured correctly in the environment variables.";
+      }
 
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: errorMessage,
+        content: `${userFriendlyTitle}\n\n**Error Details:** ${errMessage}\n\n${troubleshootingSteps}`,
         timestamp: Date.now()
       }]);
     } finally {
       setIsGenerating(false);
-      setLoadingStep('');
     }
   }, [currentMode, config]);
 
@@ -167,17 +174,11 @@ function App() {
     <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans selection:bg-indigo-500/30">
       <Sidebar 
         currentMode={currentMode} 
-        setMode={setCurrentMode} 
+        setMode={handleModeChange} 
         onReset={handleReset}
       />
       
-      <main className="flex-1 flex flex-col md:flex-row relative">
-         <ImageCanvas 
-           image={generatedImage} 
-           isLoading={isGenerating} 
-           loadingStep={loadingStep} 
-         />
-         
+      <main className="flex-1 flex flex-col relative w-full h-full bg-slate-950">
          <ChatInterface 
             messages={messages} 
             onSendMessage={handleSendMessage}
@@ -187,6 +188,11 @@ function App() {
             setConfig={setConfig}
          />
       </main>
+
+      <AdOverlay 
+        isOpen={showAdOverlay} 
+        onClose={() => setShowAdOverlay(false)} 
+      />
     </div>
   );
 }
