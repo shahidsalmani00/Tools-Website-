@@ -2,118 +2,134 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { AppMode } from "../types";
 import { memoryService } from "./memoryService";
 
-// Helper to check if API key exists
-export const hasApiKey = (): boolean => {
-  return !!process.env.API_KEY && process.env.API_KEY.length > 0;
-};
-
-// Helper to create a new client instance with the latest API key
-const getAiClient = () => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing. Please check your environment variables.");
+// ============================================================================
+//  SECURE API KEY CONFIGURATION
+// ============================================================================
+const getApiKey = (): string => {
+  // 1. Check Standard Environment Variable (For Vercel/Netlify/Node)
+  // @ts-ignore
+  if (typeof process !== 'undefined' && process.env?.API_KEY) {
+    // @ts-ignore
+    return process.env.API_KEY;
   }
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  // 2. Check Vite Environment Variable (For Local Development)
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) {
+    // @ts-ignore
+    return import.meta.env.VITE_API_KEY;
+  }
+  
+  return "";
 };
 
+export const hasApiKey = (): boolean => {
+  const key = getApiKey();
+  return !!key && key.length > 0;
+};
+
+const getAiClient = () => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("API Key is missing. Please set API_KEY in your environment variables.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
+
+// ============================================================================
+//  RETRY LOGIC (QUOTA MANAGER)
+// ============================================================================
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function retryOperation<T>(operation: () => Promise<T>, retries = 3): Promise<T> {
+  try {
+    return await operation();
+  } catch (error: any) {
+    // Detect Quota Exceeded (429)
+    const isQuotaError = 
+      error.status === 429 || 
+      error.code === 429 || 
+      (error.message && error.message.includes('429')) || 
+      (error.message && error.message.includes('quota'));
+
+    if (isQuotaError && retries > 0) {
+      // Google usually asks for ~15 seconds wait. We wait 18s to be safe.
+      const waitTime = 18000; 
+      console.warn(`[PixFrog AI] Free Tier Quota Hit. Cooling down for ${waitTime/1000}s... (Attempts left: ${retries})`);
+      
+      await sleep(waitTime);
+      return retryOperation(operation, retries - 1);
+    }
+    
+    // Other temporary errors (503 Service Unavailable)
+    if ((error.status === 503 || error.code === 503) && retries > 0) {
+       await sleep(5000);
+       return retryOperation(operation, retries - 1);
+    }
+
+    throw error;
+  }
+}
+
+// ============================================================================
+//  PROMPT ENGINEERING (Text)
+// ============================================================================
 const SYSTEM_INSTRUCTION_BASE = `
-You are an expert Prompt Engineer for generative AI models (Gemini Image / Imagen). 
+You are an expert Prompt Engineer for generative AI models. 
 Your task is to take a raw user description and transform it into a professional, high-fidelity image generation prompt based on the selected "App Mode".
 
 ### CORE PRINCIPLE:
 **Respect the User's Intent.** 
 - The "App Mode" dictates the *style*, *composition*, and *technical settings*.
 - The "User Input" dictates the *subject*, *action*, and *specific details*.
-- **DO NOT** remove specific details the user asked for (e.g., colors, specific objects, text).
-- **DO NOT** add random elements that clutter the scene unless they enhance the specific mode's goal (e.g., sparkles for a magical request is fine, but not for a minimalist logo).
 
 ### IMPORTANT: TEXT RENDERING
-If the user asks for text to be written (e.g., "says 'HELLO'", "with text 'SALE'"), you **MUST** format it in the prompt as: text "SALE", in bold typography.
+If the user asks for text to be written, format it as: text "SALE", in bold typography.
 
-### MODE-SPECIFIC STRATEGIES (Default Guidance):
-
-1. **YouTube Thumbnail** (${AppMode.THUMBNAIL}):
-   - **Goal**: High Click-Through Rate (CTR), exciting, vibrant, readable at small sizes.
-   - **Keywords to Add**: "YouTube thumbnail", "4k resolution", "vibrant colors", "dramatic lighting", "expressive face", "rule of thirds", "action shot".
-   - **Style**: High contrast, saturated.
-
-2. **Logo Design** (${AppMode.LOGO}):
-   - **Goal**: Professional, scalable, clean, simple.
-   - **Keywords to Add**: "vector art", "minimalist logo", "flat design", "clean lines", "white background", "professional", "geometric", "illustrator style".
-   - **Avoid**: Photorealism, complex shading, clutter.
-
-3. **Background Remover / Product Shot** (${AppMode.BG_REMOVER}):
-   - **Goal**: Isolate the subject perfectly.
-   - **Keywords to Add**: "isolated on pure white background", "studio lighting", "product photography", "clean cut edges", "no background", "no shadows".
-   - **Instruction**: The background must be SOLID WHITE.
-
-4. **Social Media Banner** (${AppMode.BANNER}):
-   - **Goal**: Wide aspect ratio, room for UI elements (avatars/buttons).
-   - **Keywords to Add**: "social media banner", "panoramic", "wide angle", "header image", "aesthetic", "clean composition", "negative space".
-
-5. **Poster Design** (${AppMode.POSTER}):
-   - **Goal**: Vertical, impactful, cinematic.
-   - **Keywords to Add**: "movie poster style", "vertical composition", "cinematic lighting", "visual hierarchy", "bold aesthetics", "marketing art".
-
-6. **Profile Avatar** (${AppMode.AVATAR}):
-   - **Goal**: Centered, clear face/subject, circular-crop friendly.
-   - **Keywords to Add**: "headshot", "centered composition", "avatar style", "facing camera", "highly detailed", "distinctive style".
-
-7. **General Generation** (${AppMode.GENERAL}):
-   - **Goal**: High quality interpretation of the prompt.
-   - **Keywords to Add**: "digital art", "detailed", "high quality".
-
-### INSTRUCTIONS FOR IMAGE INPUTS (Remix/Edit):
-- **If User provides specific text**: "Modify the image to match the description: [User Description]. Keep the main subject consistent if possible."
-- **If User asks to remove background**: "Generate the exact same subject but on a solid white background."
+### MODE STRATEGIES:
+1. **YouTube Thumbnail** (${AppMode.THUMBNAIL}): High CTR, vibrant, expressive.
+2. **Logo Design** (${AppMode.LOGO}): Vector art, minimalist, white background.
+3. **Background Remover** (${AppMode.BG_REMOVER}): Isolated on solid white background.
+4. **Social Banner** (${AppMode.BANNER}): Wide angle, aesthetic.
+5. **Poster** (${AppMode.POSTER}): Vertical, cinematic.
+6. **Avatar** (${AppMode.AVATAR}): Headshot, centered.
+7. **General** (${AppMode.GENERAL}): High quality digital art.
 
 ### OUTPUT FORMAT:
-Return ONLY the final refined prompt string. Do not add "Here is the prompt:" or quotes.
+Return ONLY the final refined prompt string.
 `;
 
-/**
- * Refines a user's raw text input into a high-quality image generation prompt.
- * Uses SUPERVISED LEARNING (Memory) to inject past successful styles.
- */
 export const refinePrompt = async (userInput: string, mode: AppMode, hasImages: boolean = false): Promise<string> => {
-  try {
-    const ai = getAiClient();
-    
-    // RECALL: Fetch learned patterns for this mode
-    const learnedContext = memoryService.recall(mode);
+  return retryOperation(async () => {
+    try {
+      const ai = getAiClient();
+      const learnedContext = memoryService.recall(mode);
+      
+      const context = hasImages 
+        ? `Task: Image-to-Image Prompt.\nApp Mode: ${mode}\nUser Input: "${userInput}"`
+        : `Task: Text-to-Image Prompt.\nApp Mode: ${mode}\nUser Input: "${userInput}"`;
 
-    // If we have learned memory, we explicitly tell the AI to use it.
-    const memoryDirective = learnedContext 
-      ? `\n\n[IMPORTANT: MEMORY ACTIVE]\nThe user has established a style preference in the 'LEARNED USER STYLES' section above. You MUST prioritize those stylistic choices (colors, lighting, medium) over the default mode strategies, while still keeping the new SUBJECT from the user input below.`
-      : "";
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash', 
+        contents: context,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION_BASE + learnedContext,
+          temperature: 0.7,
+        },
+      });
 
-    const context = hasImages 
-      ? `Task: Create a prompt for Image-to-Image generation.\nApp Mode: ${mode}${memoryDirective}\n\nCURRENT User Input: "${userInput}"\n(User has attached reference images to use)`
-      : `Task: Create a prompt for Text-to-Image generation.\nApp Mode: ${mode}${memoryDirective}\n\nCURRENT User Input: "${userInput}"`;
-
-    // combine system instruction with learned memory
-    // We append the learnedContext to the system instruction so it sets the "Persona" of the prompt engineer
-    const dynamicSystemInstruction = SYSTEM_INSTRUCTION_BASE + learnedContext;
-
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: context,
-      config: {
-        systemInstruction: dynamicSystemInstruction,
-        temperature: 0.7, // Slightly higher creativity to blend style + new subject
-      },
-    });
-
-    return response.text?.trim() || userInput;
-  } catch (error) {
-    console.error("Error refining prompt:", error);
-    return userInput;
-  }
+      return response.text?.trim() || userInput;
+    } catch (error) {
+      console.warn("Prompt refinement skipped due to error, using raw input.");
+      return userInput;
+    }
+  }, 1); 
 };
 
-/**
- * Generates an image based on a prompt (Text-to-Image).
- * Includes automatic fallback from Pro to Flash model on failure.
- */
+// ============================================================================
+//  IMAGE GENERATION
+// ============================================================================
+
 export const generateImage = async (
   prompt: string, 
   aspectRatio: string = '1:1',
@@ -122,28 +138,70 @@ export const generateImage = async (
   const ai = getAiClient();
 
   const attemptGen = async (usePro: boolean): Promise<string | null> => {
-    try {
-      const model = usePro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
-      
-      const config: any = {
-        imageConfig: {
-          aspectRatio: aspectRatio,
+    return retryOperation(async () => {
+        try {
+            const model = usePro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+            
+            const config: any = {
+                imageConfig: { aspectRatio: aspectRatio }
+            };
+            
+            const response = await ai.models.generateContent({
+                model: model,
+                contents: { parts: [{ text: prompt }] },
+                config: config
+            });
+
+            if (response.candidates && response.candidates[0].content.parts) {
+                for (const part of response.candidates[0].content.parts) {
+                    if (part.inlineData) {
+                        return `data:image/png;base64,${part.inlineData.data}`;
+                    }
+                }
+            }
+            return null;
+        } catch (error: any) {
+            if (usePro) {
+                console.warn(`Pro model failed (${error.message}). Falling back to Flash...`);
+                return attemptGen(false);
+            }
+            throw error; 
         }
-      };
+    }, 2);
+  };
 
-      if (usePro) {
-         config.imageConfig.imageSize = '2K';
-      }
+  return attemptGen(highQuality);
+};
 
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: {
-          parts: [{ text: prompt }]
-        },
-        config: config
+export const generateWithImages = async (
+  base64Images: string[], 
+  prompt: string,
+  aspectRatio: string = '1:1'
+): Promise<string | null> => {
+  return retryOperation(async () => {
+    try {
+      const ai = getAiClient();
+      const parts: any[] = [];
+
+      base64Images.forEach((img) => {
+        const mimeMatch = img.match(/^data:(image\/\w+);base64,/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+        const cleanData = img.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
+
+        parts.push({
+          inlineData: { data: cleanData, mimeType: mimeType },
+        });
       });
 
-      if (response.candidates && response.candidates[0].content.parts) {
+      parts.push({ text: prompt });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image', 
+        contents: { parts: parts },
+        config: { imageConfig: { aspectRatio: aspectRatio } }
+      });
+
+       if (response.candidates && response.candidates[0].content.parts) {
         for (const part of response.candidates[0].content.parts) {
           if (part.inlineData) {
             return `data:image/png;base64,${part.inlineData.data}`;
@@ -151,71 +209,9 @@ export const generateImage = async (
         }
       }
       return null;
-    } catch (error: any) {
-      if (usePro) {
-        console.warn(`Generation with ${'gemini-3-pro-image-preview'} failed, falling back to flash. Error:`, error);
-        return attemptGen(false);
-      }
-      console.error("Error generating image:", error);
+    } catch (error) {
+      console.error("Error generating with images:", error);
       throw error;
     }
-  };
-
-  return attemptGen(highQuality);
-};
-
-/**
- * Generates/Edits an image using provided reference images (Image-to-Image / Compositing).
- */
-export const generateWithImages = async (
-  base64Images: string[], 
-  prompt: string,
-  aspectRatio: string = '1:1'
-): Promise<string | null> => {
-  try {
-    const ai = getAiClient();
-    const parts: any[] = [];
-
-    // Add all images to the request parts
-    base64Images.forEach((img) => {
-      const mimeMatch = img.match(/^data:(image\/\w+);base64,/);
-      const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-      const cleanData = img.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
-
-      parts.push({
-        inlineData: {
-          data: cleanData,
-          mimeType: mimeType, 
-        },
-      });
-    });
-
-    parts.push({ text: prompt });
-
-    // Use Flash Image for multimodal inputs
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image', 
-      contents: {
-        parts: parts,
-      },
-      config: {
-         imageConfig: {
-            aspectRatio: aspectRatio
-         }
-      }
-    });
-
-     if (response.candidates && response.candidates[0].content.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          return `data:image/png;base64,${part.inlineData.data}`;
-        }
-      }
-    }
-    return null;
-
-  } catch (error) {
-    console.error("Error generating with images:", error);
-    throw error;
-  }
+  }, 2);
 };

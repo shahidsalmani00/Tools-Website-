@@ -5,11 +5,10 @@ import AdOverlay from './components/AdOverlay';
 import { AppMode, ChatMessage, GenerationConfig } from './types';
 import { refinePrompt, generateImage, generateWithImages, hasApiKey } from './services/geminiService';
 import { memoryService } from './services/memoryService';
-import { AlertTriangle, Settings, CheckCircle } from 'lucide-react';
 
 function App() {
   const [currentMode, setCurrentMode] = useState<AppMode>(AppMode.GENERAL);
-  const [isConfigured, setIsConfigured] = useState(true);
+  const [isConfigured, setIsConfigured] = useState(hasApiKey());
   
   // Store chat history separately for each mode
   const [histories, setHistories] = useState<Record<string, ChatMessage[]>>({});
@@ -23,25 +22,24 @@ function App() {
     highQuality: false
   });
 
-  useEffect(() => {
-    // Check for API Key on mount
-    setIsConfigured(hasApiKey());
-  }, []);
-
-  // Get messages for the current mode
   const currentMessages = histories[currentMode] || [];
   const isGenerating = generatingMode === currentMode;
 
-  // Automatically set Aspect Ratio and Quality based on Mode
+  useEffect(() => {
+    // Check for API key on mount (useful if env vars are injected dynamically)
+    setIsConfigured(hasApiKey());
+  }, []);
+
   useEffect(() => {
     let newRatio = '1:1';
     let newQuality = false;
 
+    // Smart Defaults based on App Mode
     switch (currentMode) {
       case AppMode.THUMBNAIL:
       case AppMode.BANNER:
         newRatio = '16:9';
-        newQuality = true; // Use Pro for better text/composition
+        newQuality = true; 
         break;
       case AppMode.POSTER:
         newRatio = '3:4';
@@ -50,11 +48,11 @@ function App() {
       case AppMode.LOGO:
       case AppMode.AVATAR:
         newRatio = '1:1';
-        newQuality = true; // Pro for sharp details
+        newQuality = true; 
         break;
       case AppMode.BG_REMOVER:
-        newRatio = '1:1'; // Edits usually preserve or default to square if generated
-        newQuality = false; // Flash is good for edits
+        newRatio = '1:1'; 
+        newQuality = false; 
         break;
       case AppMode.GENERAL:
       default:
@@ -72,7 +70,6 @@ function App() {
 
   const handleModeChange = useCallback((mode: AppMode) => {
     setCurrentMode(mode);
-    // Show interstitial ad when changing tools
     setShowAdOverlay(true);
   }, []);
 
@@ -86,10 +83,6 @@ function App() {
     }
   }, [currentMode, generatingMode]);
 
-  /**
-   * Supervised Learning Feedback Loop
-   * Called when user clicks "Like" / Thumbs Up on a message
-   */
   const handleLikeMessage = useCallback((index: number) => {
     const activeMode = currentMode;
     const messages = histories[activeMode] || [];
@@ -140,28 +133,28 @@ function App() {
       let resultImageUrl: string | null = null;
       const hasImages = imageInputs && imageInputs.length > 0;
 
+      // 1. Refine Prompt (Text Generation)
+      if (text.trim().length > 0 || !hasImages) {
+         try {
+             finalPrompt = await refinePrompt(text, activeMode, hasImages);
+         } catch (e) {
+             console.warn("Prompt refinement failed, using original text.");
+             finalPrompt = text;
+         }
+      }
+
+      // Fallback prompts if empty
+      if (!finalPrompt || finalPrompt === "") {
+            if (activeMode === AppMode.BG_REMOVER) finalPrompt = "Isolate the subject on white background.";
+            else if (activeMode === AppMode.THUMBNAIL) finalPrompt = "YouTube thumbnail.";
+            else finalPrompt = "High quality image.";
+      }
+
+      // 2. Generate Image (Image Generation)
       if (hasImages) {
-        const refinedPrompt = await refinePrompt(text, activeMode, true);
-        finalPrompt = refinedPrompt;
-
-        if (!finalPrompt || finalPrompt === "" || (text === "" && !finalPrompt)) {
-            if (activeMode === AppMode.BG_REMOVER) {
-                finalPrompt = "Isolate the main subject on a solid white background. Do not change the subject.";
-            } else if (activeMode === AppMode.THUMBNAIL) {
-                finalPrompt = "Make this into an exciting YouTube thumbnail. High contrast, expressive.";
-            } else if (activeMode === AppMode.LOGO) {
-                finalPrompt = "Turn this into a minimalist vector logo.";
-            } else {
-                finalPrompt = "Enhance this image, high quality.";
-            }
-        }
-
         resultImageUrl = await generateWithImages(imageInputs, finalPrompt, config.aspectRatio);
-      } 
-      else {
-        const refinedPrompt = await refinePrompt(text, activeMode, false);
-        finalPrompt = refinedPrompt;
-        resultImageUrl = await generateImage(refinedPrompt, config.aspectRatio, config.highQuality);
+      } else {
+        resultImageUrl = await generateImage(finalPrompt, config.aspectRatio, config.highQuality);
       }
 
       if (resultImageUrl) {
@@ -180,25 +173,27 @@ function App() {
             }]
         }));
       } else {
-        setHistories(prev => ({
-            ...prev,
-            [activeMode]: [...(prev[activeMode] || []), {
-                role: 'assistant',
-                content: "Sorry, I couldn't generate an image this time. Please try again.",
-                timestamp: Date.now()
-            }]
-        }));
+        throw new Error("No image data returned.");
       }
 
     } catch (error: any) {
       console.error("Gemini API Error:", error);
-      const errMessage = error.message || "Unknown error";
+      let errMessage = error.message || "Unknown error";
       
+      // USER-FRIENDLY ERROR MESSAGES
+      if (errMessage.includes("429") || errMessage.includes("quota") || errMessage.includes("RESOURCE_EXHAUSTED")) {
+        errMessage = "Server is extremely busy. Please wait 1 minute and try again.";
+      } else if (errMessage.includes("403")) {
+        errMessage = "Access Denied (403). API Key issue.";
+      } else if (errMessage.includes("API Key is missing")) {
+        errMessage = "API Key not found in environment.";
+      }
+
       setHistories(prev => ({
         ...prev,
         [activeMode]: [...(prev[activeMode] || []), {
             role: 'assistant',
-            content: `⚠️ Generation Failed: ${errMessage}\n\nCheck your connection or API key settings.`,
+            content: `⚠️ Generation Failed: ${errMessage}`,
             timestamp: Date.now()
         }]
       }));
@@ -206,61 +201,39 @@ function App() {
       setGeneratingMode(prev => (prev === activeMode ? null : prev));
     }
   }, [currentMode, config]);
-
-  // RENDER SETUP GUIDE IF NO API KEY
+  
   if (!isConfigured) {
     return (
-        <div className="flex h-screen bg-slate-950 text-slate-100 font-sans items-center justify-center p-6">
-            <div className="max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center text-amber-500">
-                        <AlertTriangle size={32} />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white">Setup Required</h1>
-                        <p className="text-slate-400">Connect your PixFrog app to the AI Brain.</p>
-                    </div>
-                </div>
-
-                <div className="space-y-6">
-                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                        <p className="text-sm text-slate-300 mb-2">
-                            The app is running, but it cannot find the <code className="bg-slate-950 px-1.5 py-0.5 rounded text-teal-400 font-mono">API_KEY</code> environment variable. 
-                            This is normal for new deployments on free platforms like Vercel or Netlify.
-                        </p>
-                    </div>
-
-                    <div>
-                        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                            <Settings size={18} />
-                            How to fix on Vercel (Recommended):
-                        </h2>
-                        <ol className="list-decimal list-inside space-y-3 text-slate-300 text-sm ml-2">
-                            <li className="pl-2">Go to your <strong>Vercel Dashboard</strong>.</li>
-                            <li className="pl-2">Select your project and go to <strong>Settings</strong> tab.</li>
-                            <li className="pl-2">Click on <strong>Environment Variables</strong> in the sidebar.</li>
-                            <li className="pl-2">Add a new variable:
-                                <ul className="list-disc list-inside ml-6 mt-2 space-y-1 text-slate-400">
-                                    <li>Key: <span className="text-white font-mono bg-slate-800 px-1 rounded">API_KEY</span></li>
-                                    <li>Value: <span className="text-white font-mono bg-slate-800 px-1 rounded">Your_Gemini_API_Key_Here</span></li>
-                                </ul>
-                            </li>
-                            <li className="pl-2 flex items-center gap-2">
-                                <span className="text-teal-400 font-bold">Important:</span> 
-                                Go to <strong>Deployments</strong> and verify/redeploy for changes to take effect.
-                            </li>
-                        </ol>
-                    </div>
-                </div>
-
-                <div className="mt-8 pt-6 border-t border-slate-800 flex justify-between items-center">
-                    <p className="text-xs text-slate-500">Once configured, refresh this page.</p>
-                    <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="bg-teal-600 hover:bg-teal-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors">
-                        Open Vercel Dashboard
-                    </a>
-                </div>
-            </div>
+      <div className="flex h-screen bg-slate-950 text-slate-100 font-sans items-center justify-center p-6">
+        <div className="text-center max-w-md animate-in fade-in zoom-in-95 duration-300">
+          <div className="w-20 h-20 bg-slate-800 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-slate-700 shadow-xl shadow-slate-900/50">
+             <span className="text-4xl">🔑</span>
+          </div>
+          <h1 className="text-2xl font-bold mb-3 text-white">API Key Required</h1>
+          <p className="text-slate-400 mb-8 leading-relaxed">
+            PixFrog AI is ready to deploy! Please set your Google Gemini API Key in the environment variables to start generating.
+          </p>
+          <div className="bg-slate-900/80 p-5 rounded-xl border border-slate-800 text-left text-sm text-slate-300 font-mono shadow-inner mb-6">
+             <p className="mb-2 text-slate-500 font-semibold uppercase text-xs tracking-wider">For Local Development (.env):</p>
+             <p className="text-teal-400 mb-4 bg-slate-950 p-2 rounded border border-slate-800/50 select-all">VITE_API_KEY=AIzaSy...</p>
+             
+             <p className="mb-2 text-slate-500 font-semibold uppercase text-xs tracking-wider">For Deployment (Vercel/Netlify):</p>
+             <p className="text-teal-400 bg-slate-950 p-2 rounded border border-slate-800/50 select-all">API_KEY=AIzaSy...</p>
+          </div>
+          
+          <div className="flex flex-col gap-3">
+             <p className="text-xs text-slate-600">
+                Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-teal-500 hover:underline">Google AI Studio</a>
+             </p>
+             <button 
+               onClick={() => window.location.reload()}
+               className="bg-teal-600 hover:bg-teal-500 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+             >
+               I've Added The Key - Reload App
+             </button>
+          </div>
         </div>
+      </div>
     );
   }
 
