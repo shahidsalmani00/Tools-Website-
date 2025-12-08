@@ -3,11 +3,13 @@ import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import AdOverlay from './components/AdOverlay';
 import { AppMode, ChatMessage, GenerationConfig } from './types';
-import { refinePrompt, generateImage, generateWithImages } from './services/geminiService';
+import { refinePrompt, generateImage, generateWithImages, hasApiKey } from './services/geminiService';
 import { memoryService } from './services/memoryService';
+import { AlertTriangle, Settings, CheckCircle } from 'lucide-react';
 
 function App() {
   const [currentMode, setCurrentMode] = useState<AppMode>(AppMode.GENERAL);
+  const [isConfigured, setIsConfigured] = useState(true);
   
   // Store chat history separately for each mode
   const [histories, setHistories] = useState<Record<string, ChatMessage[]>>({});
@@ -20,6 +22,11 @@ function App() {
     aspectRatio: '1:1',
     highQuality: false
   });
+
+  useEffect(() => {
+    // Check for API Key on mount
+    setIsConfigured(hasApiKey());
+  }, []);
 
   // Get messages for the current mode
   const currentMessages = histories[currentMode] || [];
@@ -88,19 +95,15 @@ function App() {
     const messages = histories[activeMode] || [];
     const message = messages[index];
     
-    // Safety check: ensure it's an assistant message with metadata
     if (!message || message.role !== 'assistant' || !message.metadata?.finalPrompt) return;
     
-    // 1. Find the User Prompt that triggered this (usually index - 1)
     const userMessage = messages[index - 1];
     const userInput = userMessage?.role === 'user' ? userMessage.content : "";
 
-    // 2. Teach the Memory Service
     if (userInput && message.metadata.finalPrompt) {
         memoryService.learn(activeMode, userInput, message.metadata.finalPrompt);
     }
 
-    // 3. Update UI to show it's liked
     const newMessages = [...messages];
     newMessages[index] = {
         ...message,
@@ -117,10 +120,7 @@ function App() {
   }, [currentMode, histories]);
 
   const handleSendMessage = useCallback(async (text: string, imageInputs?: string[]) => {
-    // Capture the mode that initiated the request
     const activeMode = currentMode;
-
-    // Add user message to state for the specific mode
     const newUserMsg: ChatMessage = {
       role: 'user',
       content: text,
@@ -140,13 +140,10 @@ function App() {
       let resultImageUrl: string | null = null;
       const hasImages = imageInputs && imageInputs.length > 0;
 
-      // WORKFLOW 1: Generation WITH Images (Editing/Compositing)
       if (hasImages) {
-        // 1. Refine the prompt specifically for image-to-image
         const refinedPrompt = await refinePrompt(text, activeMode, true);
         finalPrompt = refinedPrompt;
 
-        // Default prompt fallbacks
         if (!finalPrompt || finalPrompt === "" || (text === "" && !finalPrompt)) {
             if (activeMode === AppMode.BG_REMOVER) {
                 finalPrompt = "Isolate the main subject on a solid white background. Do not change the subject.";
@@ -161,13 +158,9 @@ function App() {
 
         resultImageUrl = await generateWithImages(imageInputs, finalPrompt, config.aspectRatio);
       } 
-      // WORKFLOW 2: Text-to-Image Generation (No input images)
       else {
-        // Step 1: Refine the prompt using Gemini Chat + Memory Service
         const refinedPrompt = await refinePrompt(text, activeMode, false);
         finalPrompt = refinedPrompt;
-        
-        // Step 2: Generate the image
         resultImageUrl = await generateImage(refinedPrompt, config.aspectRatio, config.highQuality);
       }
 
@@ -179,7 +172,6 @@ function App() {
                 content: `Here is your ${activeMode} design!`,
                 images: [resultImageUrl as string], 
                 timestamp: Date.now(),
-                // Store the prompt metadata so we can learn from it later
                 metadata: {
                     originalPrompt: text,
                     finalPrompt: finalPrompt,
@@ -200,42 +192,13 @@ function App() {
 
     } catch (error: any) {
       console.error("Gemini API Error:", error);
-      
-      const errString = error.toString();
       const errMessage = error.message || "Unknown error";
       
-      let userFriendlyTitle = "⚠️ Generation Failed";
-      let troubleshootingSteps = "";
-
-      // 403 Permission Denied / Forbidden
-      if (errString.includes('403') || errMessage.includes('PERMISSION_DENIED') || errString.includes('permission denied')) {
-        userFriendlyTitle = "⚠️ **Access Denied (403)**";
-        troubleshootingSteps = `
-**How to Fix:**
-1. **Enable API:** Go to Google Cloud Console > APIs & Services > Enable "Google Generative AI API".
-2. **Billing:** Ensure your Cloud Project has a Billing Account linked (Required for Image models).
-3. **Region:** Image generation might be restricted in your current region.
-4. **Key:** Verify your API_KEY is correct.`;
-      } 
-      // 429 Resource Exhausted / Quota
-      else if (errString.includes('429') || errMessage.includes('RESOURCE_EXHAUSTED')) {
-         userFriendlyTitle = "⚠️ **Quota Exceeded (429)**";
-         troubleshootingSteps = "**How to Fix:**\nYou have hit the rate limit. Please wait a minute before trying again or check your quota limits in Google Cloud Console.";
-      } 
-      // 500 Server Errors
-      else if (errString.includes('500') || errMessage.includes('INTERNAL')) {
-          userFriendlyTitle = "⚠️ **Server Error (500)**";
-          troubleshootingSteps = "**How to Fix:**\nGoogle's servers are experiencing issues. Please try again in a few moments.";
-      }
-      else {
-          troubleshootingSteps = "**How to Fix:**\nCheck your internet connection and ensure your API key is configured correctly in the environment variables.";
-      }
-
       setHistories(prev => ({
         ...prev,
         [activeMode]: [...(prev[activeMode] || []), {
             role: 'assistant',
-            content: `${userFriendlyTitle}\n\n**Error Details:** ${errMessage}\n\n${troubleshootingSteps}`,
+            content: `⚠️ Generation Failed: ${errMessage}\n\nCheck your connection or API key settings.`,
             timestamp: Date.now()
         }]
       }));
@@ -243,6 +206,63 @@ function App() {
       setGeneratingMode(prev => (prev === activeMode ? null : prev));
     }
   }, [currentMode, config]);
+
+  // RENDER SETUP GUIDE IF NO API KEY
+  if (!isConfigured) {
+    return (
+        <div className="flex h-screen bg-slate-950 text-slate-100 font-sans items-center justify-center p-6">
+            <div className="max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+                <div className="flex items-center gap-4 mb-6">
+                    <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center text-amber-500">
+                        <AlertTriangle size={32} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-white">Setup Required</h1>
+                        <p className="text-slate-400">Connect your PixFrog app to the AI Brain.</p>
+                    </div>
+                </div>
+
+                <div className="space-y-6">
+                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                        <p className="text-sm text-slate-300 mb-2">
+                            The app is running, but it cannot find the <code className="bg-slate-950 px-1.5 py-0.5 rounded text-teal-400 font-mono">API_KEY</code> environment variable. 
+                            This is normal for new deployments on free platforms like Vercel or Netlify.
+                        </p>
+                    </div>
+
+                    <div>
+                        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                            <Settings size={18} />
+                            How to fix on Vercel (Recommended):
+                        </h2>
+                        <ol className="list-decimal list-inside space-y-3 text-slate-300 text-sm ml-2">
+                            <li className="pl-2">Go to your <strong>Vercel Dashboard</strong>.</li>
+                            <li className="pl-2">Select your project and go to <strong>Settings</strong> tab.</li>
+                            <li className="pl-2">Click on <strong>Environment Variables</strong> in the sidebar.</li>
+                            <li className="pl-2">Add a new variable:
+                                <ul className="list-disc list-inside ml-6 mt-2 space-y-1 text-slate-400">
+                                    <li>Key: <span className="text-white font-mono bg-slate-800 px-1 rounded">API_KEY</span></li>
+                                    <li>Value: <span className="text-white font-mono bg-slate-800 px-1 rounded">Your_Gemini_API_Key_Here</span></li>
+                                </ul>
+                            </li>
+                            <li className="pl-2 flex items-center gap-2">
+                                <span className="text-teal-400 font-bold">Important:</span> 
+                                Go to <strong>Deployments</strong> and verify/redeploy for changes to take effect.
+                            </li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-slate-800 flex justify-between items-center">
+                    <p className="text-xs text-slate-500">Once configured, refresh this page.</p>
+                    <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="bg-teal-600 hover:bg-teal-500 text-white px-6 py-2.5 rounded-lg font-medium transition-colors">
+                        Open Vercel Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans selection:bg-teal-500/30">
@@ -254,7 +274,7 @@ function App() {
       
       <main className="flex-1 flex flex-col relative w-full h-full bg-slate-950">
          <ChatInterface 
-            key={currentMode} // Force re-mount on mode change to clear input/selection state
+            key={currentMode} 
             messages={currentMessages} 
             onSendMessage={handleSendMessage}
             onLikeMessage={handleLikeMessage}

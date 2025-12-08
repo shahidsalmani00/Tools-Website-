@@ -2,8 +2,18 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { AppMode } from "../types";
 import { memoryService } from "./memoryService";
 
+// Helper to check if API key exists
+export const hasApiKey = (): boolean => {
+  return !!process.env.API_KEY && process.env.API_KEY.length > 0;
+};
+
 // Helper to create a new client instance with the latest API key
-const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAiClient = () => {
+  if (!process.env.API_KEY) {
+    throw new Error("API Key is missing. Please check your environment variables.");
+  }
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+};
 
 const SYSTEM_INSTRUCTION_BASE = `
 You are an expert Prompt Engineer for generative AI models (Gemini Image / Imagen). 
