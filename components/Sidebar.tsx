@@ -56,36 +56,28 @@ const Sidebar: React.FC<SidebarProps> = ({ currentMode, setMode, onReset }) => {
                   </linearGradient>
                 </defs>
                 
-                {/* Pixels Floating */}
                 <rect x="15" y="10" width="8" height="8" fill="#22d3ee" opacity="0.8" />
                 <rect x="75" y="12" width="6" height="6" fill="#2dd4bf" opacity="0.8" />
                 <rect x="25" y="5" width="5" height="5" fill="#0ea5e9" opacity="0.6" />
 
-                {/* Froge Head */}
                 <path d="M20 45 Q20 25 35 25 L65 25 Q80 25 80 45 L80 50 L20 50 Z" fill="url(#headGrad)" />
                 
-                {/* Eyes */}
                 <circle cx="30" cy="35" r="10" fill="white" stroke="#0f172a" strokeWidth="2" />
                 <circle cx="30" cy="35" r="5" fill="#0f172a" />
                 
                 <circle cx="70" cy="35" r="10" fill="white" stroke="#0f172a" strokeWidth="2" />
                 <circle cx="70" cy="35" r="5" fill="#0f172a" />
                 
-                {/* Mouth Line */}
                 <path d="M22 50 L78 50" stroke="#1e293b" strokeWidth="3" strokeLinecap="round" />
 
-                {/* Camera Body */}
                 <rect x="20" y="52" width="60" height="35" rx="8" fill="url(#bodyGrad)" />
                 
-                {/* Camera Lens */}
                 <circle cx="50" cy="69" r="14" fill="#f8fafc" />
                 <circle cx="50" cy="69" r="11" fill="#1e293b" />
                 <circle cx="53" cy="66" r="3" fill="white" opacity="0.9" />
                 
-                {/* Camera Flash/Button */}
                 <circle cx="72" cy="60" r="3" fill="white" opacity="0.8" />
                 
-                {/* Dashed Lens Ring */}
                 <circle cx="50" cy="69" r="16" fill="none" stroke="#334155" strokeWidth="1" strokeDasharray="2,2" />
              </svg>
            )}
@@ -106,7 +98,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentMode, setMode, onReset }) => {
           </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4 scrollbar-hide">
+      <nav className="flex-1 overflow-y-auto py-4 scrollbar-hide flex flex-col justify-between">
         <ul className="space-y-1 px-2">
           {modes.map((mode) => (
             <li key={mode.id}>

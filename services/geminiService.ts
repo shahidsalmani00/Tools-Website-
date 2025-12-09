@@ -1,37 +1,15 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { AppMode } from "../types";
 import { memoryService } from "./memoryService";
 
 // ============================================================================
-//  SECURE API KEY CONFIGURATION
+//  API KEY CONFIGURATION
 // ============================================================================
-const getApiKey = (): string => {
-  // 1. Check Standard Environment Variable (For Vercel/Netlify/Node)
-  // @ts-ignore
-  if (typeof process !== 'undefined' && process.env?.API_KEY) {
-    // @ts-ignore
-    return process.env.API_KEY;
-  }
-  
-  // 2. Check Vite Environment Variable (For Local Development)
-  // @ts-ignore
-  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_API_KEY;
-  }
-  
-  return "";
-};
-
-export const hasApiKey = (): boolean => {
-  const key = getApiKey();
-  return !!key && key.length > 0;
-};
-
 const getAiClient = () => {
-  const apiKey = getApiKey();
+  // @ts-ignore
+  const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    throw new Error("API Key is missing. Please set API_KEY in your environment variables.");
+    throw new Error("API Key is missing from environment variables.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -45,6 +23,8 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 3): Prom
   try {
     return await operation();
   } catch (error: any) {
+    console.error("Gemini Operation Error:", error);
+    
     // Detect Quota Exceeded (429)
     const isQuotaError = 
       error.status === 429 || 
@@ -53,15 +33,12 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 3): Prom
       (error.message && error.message.includes('quota'));
 
     if (isQuotaError && retries > 0) {
-      // Google usually asks for ~15 seconds wait. We wait 18s to be safe.
-      const waitTime = 18000; 
-      console.warn(`[PixFrog AI] Free Tier Quota Hit. Cooling down for ${waitTime/1000}s... (Attempts left: ${retries})`);
-      
+      const waitTime = 15000; 
+      console.warn(`[PixFrog AI] Quota Hit. Cooling down for ${waitTime/1000}s...`);
       await sleep(waitTime);
       return retryOperation(operation, retries - 1);
     }
     
-    // Other temporary errors (503 Service Unavailable)
     if ((error.status === 503 || error.code === 503) && retries > 0) {
        await sleep(5000);
        return retryOperation(operation, retries - 1);
@@ -120,7 +97,7 @@ export const refinePrompt = async (userInput: string, mode: AppMode, hasImages: 
 
       return response.text?.trim() || userInput;
     } catch (error) {
-      console.warn("Prompt refinement skipped due to error, using raw input.");
+      console.warn("Prompt refinement skipped, using raw input.");
       return userInput;
     }
   }, 1); 
@@ -141,6 +118,7 @@ export const generateImage = async (
     return retryOperation(async () => {
         try {
             const model = usePro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+            console.log(`Generating image with model: ${model}`);
             
             const config: any = {
                 imageConfig: { aspectRatio: aspectRatio }
@@ -161,6 +139,7 @@ export const generateImage = async (
             }
             return null;
         } catch (error: any) {
+            // If Pro model fails (often due to lack of billing or permissions), fallback to Flash
             if (usePro) {
                 console.warn(`Pro model failed (${error.message}). Falling back to Flash...`);
                 return attemptGen(false);

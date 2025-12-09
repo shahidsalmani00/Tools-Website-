@@ -3,12 +3,11 @@ import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import AdOverlay from './components/AdOverlay';
 import { AppMode, ChatMessage, GenerationConfig } from './types';
-import { refinePrompt, generateImage, generateWithImages, hasApiKey } from './services/geminiService';
+import { refinePrompt, generateImage, generateWithImages } from './services/geminiService';
 import { memoryService } from './services/memoryService';
 
 function App() {
   const [currentMode, setCurrentMode] = useState<AppMode>(AppMode.GENERAL);
-  const [isConfigured, setIsConfigured] = useState(hasApiKey());
   
   // Store chat history separately for each mode
   const [histories, setHistories] = useState<Record<string, ChatMessage[]>>({});
@@ -17,18 +16,14 @@ function App() {
   const [generatingMode, setGeneratingMode] = useState<AppMode | null>(null);
   
   const [showAdOverlay, setShowAdOverlay] = useState(false);
+  
   const [config, setConfig] = useState<GenerationConfig>({
     aspectRatio: '1:1',
     highQuality: false
   });
-
+  
   const currentMessages = histories[currentMode] || [];
   const isGenerating = generatingMode === currentMode;
-
-  useEffect(() => {
-    // Check for API key on mount (useful if env vars are injected dynamically)
-    setIsConfigured(hasApiKey());
-  }, []);
 
   useEffect(() => {
     let newRatio = '1:1';
@@ -173,27 +168,28 @@ function App() {
             }]
         }));
       } else {
-        throw new Error("No image data returned.");
+        throw new Error("No image data returned from API.");
       }
 
     } catch (error: any) {
       console.error("Gemini API Error:", error);
       let errMessage = error.message || "Unknown error";
       
-      // USER-FRIENDLY ERROR MESSAGES
       if (errMessage.includes("429") || errMessage.includes("quota") || errMessage.includes("RESOURCE_EXHAUSTED")) {
-        errMessage = "Server is extremely busy. Please wait 1 minute and try again.";
+        errMessage = "Server traffic is high (Quota Limit). Please wait a moment and try again.";
       } else if (errMessage.includes("403")) {
-        errMessage = "Access Denied (403). API Key issue.";
+        errMessage = "API Key Invalid or Access Denied. Please check your environment configuration.";
       } else if (errMessage.includes("API Key is missing")) {
-        errMessage = "API Key not found in environment.";
+        errMessage = "API Key not found. Please check your environment configuration.";
+      } else if (errMessage.includes("SAFETY")) {
+        errMessage = "Generation blocked by safety filters. Try a different prompt.";
       }
 
       setHistories(prev => ({
         ...prev,
         [activeMode]: [...(prev[activeMode] || []), {
             role: 'assistant',
-            content: `⚠️ Generation Failed: ${errMessage}`,
+            content: `⚠️ ${errMessage}`,
             timestamp: Date.now()
         }]
       }));
@@ -201,44 +197,9 @@ function App() {
       setGeneratingMode(prev => (prev === activeMode ? null : prev));
     }
   }, [currentMode, config]);
-  
-  if (!isConfigured) {
-    return (
-      <div className="flex h-screen bg-slate-950 text-slate-100 font-sans items-center justify-center p-6">
-        <div className="text-center max-w-md animate-in fade-in zoom-in-95 duration-300">
-          <div className="w-20 h-20 bg-slate-800 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-slate-700 shadow-xl shadow-slate-900/50">
-             <span className="text-4xl">🔑</span>
-          </div>
-          <h1 className="text-2xl font-bold mb-3 text-white">API Key Required</h1>
-          <p className="text-slate-400 mb-8 leading-relaxed">
-            PixFrog AI is ready to deploy! Please set your Google Gemini API Key in the environment variables to start generating.
-          </p>
-          <div className="bg-slate-900/80 p-5 rounded-xl border border-slate-800 text-left text-sm text-slate-300 font-mono shadow-inner mb-6">
-             <p className="mb-2 text-slate-500 font-semibold uppercase text-xs tracking-wider">For Local Development (.env):</p>
-             <p className="text-teal-400 mb-4 bg-slate-950 p-2 rounded border border-slate-800/50 select-all">VITE_API_KEY=AIzaSy...</p>
-             
-             <p className="mb-2 text-slate-500 font-semibold uppercase text-xs tracking-wider">For Deployment (Vercel/Netlify):</p>
-             <p className="text-teal-400 bg-slate-950 p-2 rounded border border-slate-800/50 select-all">API_KEY=AIzaSy...</p>
-          </div>
-          
-          <div className="flex flex-col gap-3">
-             <p className="text-xs text-slate-600">
-                Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-teal-500 hover:underline">Google AI Studio</a>
-             </p>
-             <button 
-               onClick={() => window.location.reload()}
-               className="bg-teal-600 hover:bg-teal-500 text-white py-2 px-4 rounded-lg font-medium transition-colors"
-             >
-               I've Added The Key - Reload App
-             </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans selection:bg-teal-500/30">
+    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans selection:bg-teal-500/30 relative">
       <Sidebar 
         currentMode={currentMode} 
         setMode={handleModeChange} 
