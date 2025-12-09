@@ -7,9 +7,10 @@ import { memoryService } from "./memoryService";
 // ============================================================================
 const getAiClient = () => {
   // @ts-ignore
-  const apiKey = process.env.API_KEY;
+  const apiKey = (typeof process !== "undefined" && process.env) ? process.env.API_KEY : undefined;
+  
   if (!apiKey) {
-    throw new Error("API Key is missing from environment variables.");
+    throw new Error("API Key is missing. Please connect your account in the main screen.");
   }
   return new GoogleGenAI({ apiKey });
 };
