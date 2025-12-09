@@ -5,12 +5,8 @@ import AdOverlay from './components/AdOverlay';
 import { AppMode, ChatMessage, GenerationConfig } from './types';
 import { refinePrompt, generateImage, generateWithImages } from './services/geminiService';
 import { memoryService } from './services/memoryService';
-import { Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
 
 function App() {
-  const [apiKeyReady, setApiKeyReady] = useState<boolean>(false);
-  const [checkingKey, setCheckingKey] = useState<boolean>(true);
-
   // App State
   const [currentMode, setCurrentMode] = useState<AppMode>(AppMode.GENERAL);
   const [histories, setHistories] = useState<Record<string, ChatMessage[]>>({});
@@ -24,52 +20,6 @@ function App() {
   
   const currentMessages = histories[currentMode] || [];
   const isGenerating = generatingMode === currentMode;
-
-  // ===========================================================================
-  // API KEY MANAGEMENT
-  // ===========================================================================
-  useEffect(() => {
-    checkApiKey();
-  }, []);
-
-  const checkApiKey = async () => {
-    try {
-      if (window.aistudio) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        setApiKeyReady(hasKey);
-      } else {
-        // Fallback for dev environments where aistudio might not be injected
-        // assuming process.env.API_KEY is manually set
-        // @ts-ignore
-        if (process.env.API_KEY) setApiKeyReady(true);
-      }
-    } catch (e) {
-      console.error("Error checking API key:", e);
-    } finally {
-      setCheckingKey(false);
-    }
-  };
-
-  const handleConnectApiKey = async () => {
-    try {
-      if (window.aistudio) {
-        await window.aistudio.openSelectKey();
-        // Assume success if no error thrown
-        setApiKeyReady(true);
-      }
-    } catch (error: any) {
-      console.error("Key selection failed:", error);
-      if (error.message && error.message.includes("Requested entity was not found")) {
-         // Retry logic as per guidelines
-         alert("Session expired. Please select your key again.");
-         handleConnectApiKey();
-      }
-    }
-  };
-
-  // ===========================================================================
-  // APP LOGIC
-  // ===========================================================================
 
   useEffect(() => {
     let newRatio = '1:1';
@@ -224,9 +174,9 @@ function App() {
       if (errMessage.includes("429") || errMessage.includes("quota") || errMessage.includes("RESOURCE_EXHAUSTED")) {
         errMessage = "Server traffic is high (Quota Limit). Please wait a moment and try again.";
       } else if (errMessage.includes("403")) {
-        errMessage = "API Key Invalid or Access Denied. Please check your environment configuration.";
+        errMessage = "API Key Invalid or Access Denied. Please check your configuration.";
       } else if (errMessage.includes("API Key is missing")) {
-        errMessage = "API Key not found. Please ensure you have connected your account.";
+        errMessage = "API Key not found. Please ensure it is set in the code.";
       } else if (errMessage.includes("SAFETY")) {
         errMessage = "Generation blocked by safety filters. Try a different prompt.";
       }
@@ -244,71 +194,6 @@ function App() {
     }
   }, [currentMode, config]);
 
-  // ===========================================================================
-  // RENDER: LOADING / LANDING
-  // ===========================================================================
-
-  if (checkingKey) {
-     return <div className="h-screen bg-slate-950 flex items-center justify-center text-teal-500">
-         <Sparkles className="animate-spin" size={32} />
-     </div>;
-  }
-
-  if (!apiKeyReady) {
-    return (
-        <div className="h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-             {/* Background Effects */}
-             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-                 <div className="absolute -top-[20%] -left-[10%] w-[60%] h-[60%] bg-teal-500/10 rounded-full blur-[100px]"></div>
-                 <div className="absolute bottom-[0%] right-[0%] w-[50%] h-[50%] bg-indigo-500/10 rounded-full blur-[100px]"></div>
-             </div>
-
-             <div className="max-w-md w-full bg-slate-900/50 backdrop-blur-xl border border-slate-800 p-8 rounded-3xl shadow-2xl relative z-10 text-center">
-                 <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-cyan-600 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-lg shadow-teal-500/20">
-                     <Sparkles className="text-white" size={32} />
-                 </div>
-                 
-                 <h1 className="text-3xl font-bold text-white mb-2">PixFrog AI</h1>
-                 <p className="text-slate-400 mb-8 leading-relaxed">
-                    Unleash your creativity with our advanced AI Studio. 
-                    Generate thumbnails, logos, and banners in seconds.
-                 </p>
-
-                 <div className="bg-slate-800/50 rounded-xl p-4 mb-8 border border-slate-700/50 text-left">
-                     <h3 className="text-slate-200 font-semibold text-sm mb-2 flex items-center gap-2">
-                        <ShieldCheck size={16} className="text-green-400"/> 
-                        Access Required
-                     </h3>
-                     <p className="text-xs text-slate-500 mb-2">
-                        To use high-quality models (Gemini 2.5/3.0), you must connect a valid API Key from a Google Cloud Project.
-                     </p>
-                     <a 
-                       href="https://ai.google.dev/gemini-api/docs/billing" 
-                       target="_blank" 
-                       rel="noreferrer"
-                       className="text-[10px] text-teal-400 hover:text-teal-300 underline"
-                     >
-                       Read about Billing Requirements &rarr;
-                     </a>
-                 </div>
-
-                 <button 
-                    onClick={handleConnectApiKey}
-                    className="w-full bg-white text-slate-900 hover:bg-slate-100 font-bold py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-xl hover:scale-[1.02] active:scale-[0.98]"
-                 >
-                    <span>Connect Google Account</span>
-                    <ArrowRight size={18} />
-                 </button>
-             </div>
-             
-             <p className="mt-8 text-slate-600 text-xs">Powered by Google Gemini API</p>
-        </div>
-    );
-  }
-
-  // ===========================================================================
-  // RENDER: MAIN APP
-  // ===========================================================================
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans selection:bg-teal-500/30 relative">
       <Sidebar 

@@ -6,12 +6,8 @@ import { memoryService } from "./memoryService";
 //  API KEY CONFIGURATION
 // ============================================================================
 const getAiClient = () => {
-  // @ts-ignore
-  const apiKey = (typeof process !== "undefined" && process.env) ? process.env.API_KEY : undefined;
-  
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please connect your account in the main screen.");
-  }
+  // Hardcoded API Key as requested by user
+  const apiKey = "AIzaSyB28gNdB5cf9a6yPoKE3OTJUY8XsyWwLTg";
   return new GoogleGenAI({ apiKey });
 };
 
