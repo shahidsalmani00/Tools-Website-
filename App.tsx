@@ -170,15 +170,19 @@ function App() {
     } catch (error: any) {
       console.error("Gemini API Error:", error);
       let errMessage = error.message || "Unknown error";
+      const errString = error.toString();
       
-      if (errMessage.includes("429") || errMessage.includes("quota") || errMessage.includes("RESOURCE_EXHAUSTED")) {
+      if (errString.includes("429") || errMessage.includes("quota") || errMessage.includes("RESOURCE_EXHAUSTED")) {
         errMessage = "Server traffic is high (Quota Limit). Please wait a moment and try again.";
-      } else if (errMessage.includes("403")) {
-        errMessage = "API Key Invalid or Access Denied. Please check your configuration.";
+      } else if (errString.includes("403") || errMessage.includes("PERMISSION_DENIED")) {
+        // Updated to show current hostname for easier debugging when hosted
+        errMessage = `Access Denied (403). App is running on "${window.location.hostname}". Please add this domain to your API Key restrictions in Google Cloud Console.`;
       } else if (errMessage.includes("API Key is missing")) {
-        errMessage = "API Key not found. Please ensure it is set in the code.";
+        errMessage = "API Key not found. Please check the code configuration.";
       } else if (errMessage.includes("SAFETY")) {
         errMessage = "Generation blocked by safety filters. Try a different prompt.";
+      } else if (errMessage.includes("fetch")) {
+        errMessage = "Network Error. Please check your internet connection.";
       }
 
       setHistories(prev => ({

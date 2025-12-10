@@ -7,7 +7,13 @@ import { memoryService } from "./memoryService";
 // ============================================================================
 const getAiClient = () => {
   // Hardcoded API Key as requested by user
-  const apiKey = "AIzaSyB28gNdB5cf9a6yPoKE3OTJUY8XsyWwLTg";
+  // Added trim() to ensure no accidental whitespace copy-paste issues
+  const apiKey = "AIzaSyB28gNdB5cf9a6yPoKE3OTJUY8XsyWwLTg".trim();
+  
+  if (!apiKey) {
+    console.error("API Key is empty!");
+  }
+  
   return new GoogleGenAI({ apiKey });
 };
 
@@ -20,7 +26,7 @@ async function retryOperation<T>(operation: () => Promise<T>, retries = 3): Prom
   try {
     return await operation();
   } catch (error: any) {
-    console.error("Gemini Operation Error:", error);
+    console.error("Gemini Operation Error Details:", error);
     
     // Detect Quota Exceeded (429)
     const isQuotaError = 
@@ -94,7 +100,7 @@ export const refinePrompt = async (userInput: string, mode: AppMode, hasImages: 
 
       return response.text?.trim() || userInput;
     } catch (error) {
-      console.warn("Prompt refinement skipped, using raw input.");
+      console.warn("Prompt refinement skipped, using raw input. Error:", error);
       return userInput;
     }
   }, 1); 
