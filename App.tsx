@@ -172,17 +172,17 @@ function App() {
       let errMessage = error.message || "Unknown error";
       const errString = error.toString();
       
+      // Simplified Error Messages for a better user experience
       if (errString.includes("429") || errMessage.includes("quota") || errMessage.includes("RESOURCE_EXHAUSTED")) {
-        errMessage = "Server traffic is high (Quota Limit). Please wait a moment and try again.";
+        errMessage = "System busy. Please wait a few seconds and try again.";
       } else if (errString.includes("403") || errMessage.includes("PERMISSION_DENIED")) {
-        // Updated to show current hostname for easier debugging when hosted
-        errMessage = `Access Denied (403). App is running on "${window.location.hostname}". Please add this domain to your API Key restrictions in Google Cloud Console.`;
+        errMessage = "Connection refused. The API Key may have restrictions or is invalid.";
       } else if (errMessage.includes("API Key is missing")) {
-        errMessage = "API Key not found. Please check the code configuration.";
+        errMessage = "API Key is missing in the configuration.";
       } else if (errMessage.includes("SAFETY")) {
-        errMessage = "Generation blocked by safety filters. Try a different prompt.";
+        errMessage = "I couldn't generate that due to safety guidelines. Please try a different description.";
       } else if (errMessage.includes("fetch")) {
-        errMessage = "Network Error. Please check your internet connection.";
+        errMessage = "Network error. Please check your internet connection.";
       }
 
       setHistories(prev => ({

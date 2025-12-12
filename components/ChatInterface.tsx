@@ -166,14 +166,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                          <Sparkles size={14} className="text-white" />
                      </div>
                      <div className="flex-1 min-w-0">
+                        
+                        {/* Message Content */}
                         <div className="text-sm text-slate-300 mb-3 bg-slate-800/50 px-4 py-3 rounded-2xl rounded-tl-sm border border-slate-700/50 inline-block relative group/text">
                             {msg.content}
-                            
-                            {/* Learning Badge if Liked */}
                             {msg.metadata?.liked && (
-                              <div className="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-lg border border-green-400 animate-in zoom-in">
+                                <div className="absolute -top-2 -right-2 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full shadow-lg border border-green-400 animate-in zoom-in">
                                 Learned
-                              </div>
+                                </div>
                             )}
                         </div>
 

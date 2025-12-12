@@ -6,15 +6,15 @@ import { memoryService } from "./memoryService";
 //  API KEY CONFIGURATION
 // ============================================================================
 const getAiClient = () => {
-  // Hardcoded API Key as requested by user
-  // Added trim() to ensure no accidental whitespace copy-paste issues
-  const apiKey = "AIzaSyB28gNdB5cf9a6yPoKE3OTJUY8XsyWwLTg".trim();
+  // Using environment variable for security as requested.
+  // The API key must be provided via the API_KEY environment variable.
+  const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    console.error("API Key is empty!");
+    console.error("API Key is missing! Please check your environment variables.");
   }
   
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: apiKey || "" });
 };
 
 // ============================================================================
@@ -76,7 +76,7 @@ If the user asks for text to be written, format it as: text "SALE", in bold typo
 7. **General** (${AppMode.GENERAL}): High quality digital art.
 
 ### OUTPUT FORMAT:
-Return ONLY the final refined prompt string.
+Return ONLY the final refined prompt string. Do not add explanations.
 `;
 
 export const refinePrompt = async (userInput: string, mode: AppMode, hasImages: boolean = false): Promise<string> => {
